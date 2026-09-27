@@ -17,52 +17,36 @@ intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 tree = app_commands.CommandTree(client)
 
-class Kaiju:
-    def __init__(self, name):
-        self.name=name
 
-    async def godzillaguess(self,ctx):
-        await ctx.send("Canavarlar kralı, radyoaktif kertenkele. (bunu da bil bi zahmet)")
-        if Kaiju.name is not self.name:
-            return f"Yanlış kaiju! Doğru kaiju şuydu: {self.name}"
-        else:
-            return f"Doğru"
-    async def kingkongguess(self,ctx):
-        await ctx.send("Kafatası adası, dev goril.")
-        if Kaiju.name is not self.name:
-            return f"Yanlış kaiju! Doğru kaiju şuydu: {self.name}"
-        else:
-            return f"Doğru"
-    async def mothraguess(self,ctx):
-        await ctx.send("Güve kraliçe, ışık saçar.")
-        if Kaiju.name is not self.name:
-            return f"Yanlış kaiju! Doğru kaiju şuydu: {self.name}"
-        else:
-            return f"Doğru"
-    async def rodanguess(self,ctx):
-        await ctx.send("Kendini anka kuşu sanıyor")
-        if Kaiju.name is not self.name:
-            return f"Yanlış kaiju! Doğru kaiju şuydu: {self.name}"
-        else:
-            return f"Doğru"
-    async def ghidoraguess(self,ctx):
-        await ctx.send("Üç kafalı altın uzaylı hidra.")
-        if Kaiju.name is not self.name:
-            return f"Yanlış kaiju! Doğru kaiju şuydu: {self.name}"
-        else:
-            return f"Doğru"
+@bot.command()  # Kullanıcı "!start" girdiğinde çağrılacak "start" komutunu tanımlayın
+async def start(ctx):
+    await ctx.send("merhaba, ben bir chomikim. (?)")
 
-    Kaiju1 = Kaiju("Godzilla",)
-    Kaiju1.godzillaguess()
-    Kaiju2 = Kaiju("King Kong")
-    Kaiju2.kingkongguess()
-    Kaiju3 = Kaiju("Mothra")
-    Kaiju3.mothraguess()
-    Kaiju4 = Kaiju("Rodan")
-    Kaiju4.rodanguess()
-    Kaiju5 = Kaiju("Ghidorah")
-    Kaiju5.ghidoraguess()
+@bot.command()  # Kullanıcının yasaklama haklarına sahip olmasını gerektiren "ban" komutunun tanımlanması
+@commands.has_permissions(ban_members=True)
+async def ban(ctx, member: discord.Member = None):
+    if member:  # Komutun yasaklanması gereken kullanıcıyı belirtip belirtmediğinin kontrol edilmesi
+        if ctx.author.top_role <= member.top_role:
+            await ctx.send("Eşit veya daha yüksek rütbeli bir kullanıcıyı yasaklamak mümkün değildir.")
+        else:
+            await ctx.guild.ban(member)  # Bir kullanıcıyı sunucudan yasaklama
+            await ctx.send(f" Kullanıcı {member.name} banlandı.")
+        
+        if "https://" in ctx.message.content.lower():
+            await ctx.message.delete()
+            await ctx.author.ban(reason="onun bir reklam olmadığını sen de ben de biliyoruz.")
+            await ctx.send(f"{ctx.author.name} reklam yaptığı için banlandı.")
+        else:
+            await ctx.send("hata")
+    else:
+        await ctx.send("Bu komut banlamak istediğiniz kullanıcıyı işaret etmelidir. Örneğin: `!ban @user`")
 
+@ban.error  # "ban" komutu için bir hata işleyicisi/handler tanımlayın
+async def ban_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("Bu komutu çalıştırmak için yeterli izniniz yok.")  # Kullanıcıyı erişim hakları hatası hakkında bilgilendiren bir mesaj gönderme
+    elif isinstance(error, commands.MemberNotFound):
+        await ctx.send("Kullanıcı bulunamadı.")  # Belirtilen kullanıcı bulunamazsa bir hata mesajı gönderme
 
 
 @tree.command(name="info", description="Bot hakkında bilgi verir.")

@@ -66,6 +66,12 @@ async def on_ready():
 async def on_ready():
     print(f'Giriş yapıldı: {bot.user.name}')
 
+@bot.event
+async def on_member_join(member):
+    # Karşılama mesajı gönderme
+    for channel in member.guild.text_channels:
+        await channel.send(f' Hoş geldiniz: , {member.mention}!')
+
 @bot.command()
 async def go(ctx):
     author = ctx.author.name

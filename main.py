@@ -1,67 +1,99 @@
-from datetime import datetime, timedelta
-
-import aiohttp
+import discord
+from discord.ext import commands
+from config import token 
+from logic import Pokemon
 import random
+from logic import Wizard, Fighter
+from discord import app_commands
 
-class Pokemon:
-    pokemons = {}
+intents = discord.Intents.default()
+intents.messages = True
+intents.message_content = True
+intents.guilds = True 
+bot = commands.Bot(command_prefix='!', intents=intents)
 
-    def __init__(self, pokemon_trainer):
-        self.pokemon_trainer = pokemon_trainer
-        self.pokemon_number = random.randint(1, 1000)
-        self.img = None
-        self.name = None
-        self.hp = random.randint(200, 400)
-        self.power = random.randint(30, 60)
-        self.last_feed_time  = datetime.now()
-        if pokemon_trainer not in self.pokemons:
-            self.pokemons[pokemon_trainer] = self
 
-    async def feed(self, feed_interval=60, hp_increase=10):
-            current_time = datetime.now()
-            delta_time = timedelta(seconds=feed_interval)
-            if (current_time - self.last_feed_time) > delta_time:
-                self.hp += hp_increase
-                self.last_feed_time = current_time
-                return f"Pokémon'un sağlığı geri yüklenir. Mevcut sağlık: {self.hp}"
-            else:
-                return f"Pokémonunuzu şu zaman besleyebilirsiniz: {current_time+delta_time}"
+intents = discord.Intents.default()
+client = discord.Client(intents=intents)
+tree = app_commands.CommandTree(client)
 
 
 
+@bot.command()  # Kullanıcı "!start" girdiğinde çağrılacak "start" komutunu tanımlayın
+async def start(ctx):
+    await ctx.send("merhaba, ben bir chomikim. (?)")
+
+@bot.command()  # Kullanıcının yasaklama haklarına sahip olmasını gerektiren "ban" komutunun tanımlanması
+@commands.has_permissions(ban_members=True)
+async def ban(ctx, member: discord.Member = None):
+    if member:  # Komutun yasaklanması gereken kullanıcıyı belirtip belirtmediğinin kontrol edilmesi
+        if ctx.author.top_role <= member.top_role:
+            await ctx.send("Eşit veya daha yüksek rütbeli bir kullanıcıyı yasaklamak mümkün değildir.")
+        else:
+            await ctx.guild.ban(member)  # Bir kullanıcıyı sunucudan yasaklama
+            await ctx.send(f" Kullanıcı {member.name} banlandı.")
         
-    async def get_name(self):
-        url = f'https://pokeapi.co/api/v2/pokemon/{self.pokemon_number}'
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return data['forms'][0]['name']
-                else:
-                    return "Pikachu"
+        if "https://" in ctx.message.content.lower():
+            await ctx.message.delete()
+            await ctx.author.ban(reason="onun bir reklam olmadığını sen de ben de biliyoruz.")
+            await ctx.send(f"{ctx.author.name} reklam yaptığı için banlandı.")
+        else:
+            await ctx.send("hata")
+    else:
+        await ctx.send("Bu komut banlamak istediğiniz kullanıcıyı işaret etmelidir. Örneğin: `!ban @user`")
 
-    async def info(self):
-        if not self.name:
-            self.name = await self.get_name()
-        return f"Pokémonunuzun ismi: {self.name} Pokemonunuzun canı:{self.hp} Pokemonunuzun gücü: {self.power}"
+@ban.error  # "ban" komutu için bir hata işleyicisi/handler tanımlayın
+async def ban_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("Bu komutu çalıştırmak için yeterli izniniz yok.")  # Kullanıcıyı erişim hakları hatası hakkında bilgilendiren bir mesaj gönderme
+    elif isinstance(error, commands.MemberNotFound):
+        await ctx.send("Kullanıcı bulunamadı.")  # Belirtilen kullanıcı bulunamazsa bir hata mesajı gönderme
 
-    async def show_img(self):
-        # PokeAPI aracılığıyla bir pokémonun adını almak için asenktron metot
-        url = f'https://pokeapi.co/api/v2/pokemon/{self.pokemon_number}'
-        async with aiohttp.ClientSession() as session:  #  HTTP oturumu açmak
-            async with session.get(url) as response:  # Pokémon verilerini almak için bir GET isteği gönderme
-                if response.status == 200:
-                    data = await response.json()  # JSON yanıtının alınması
-                    img_url = data['sprites']['front_default']  #  Pokémonun URL'sini alma
-                    return img_url  # Resmin URL'sini döndürme
-                else:
-                    return None  # İstek başarısız olursa None döndürür
-                
+
+@tree.command(name="info", description="Bot hakkında bilgi verir.")
+async def info_command(interaction: discord.Interaction):
+    #cevap ver ve botun pingini göster
+    ping = round(client.latency * 1000)
+    await interaction.response.send_message(f"Bot çalışıyor! Ping: {ping}ms")
+
+
+@client.event
+async def on_ready():
+    await tree.sync()
+    print(f'{client.user} olarak giriş yapıldı ve /info komutu yüklendi!')
+
+
+@bot.event
+async def on_ready():
+    print(f'Giriş yapıldı: {bot.user.name}')
+
+@bot.event
+async def on_member_join(member):
+    # Karşılama mesajı gönderme
+    for channel in member.guild.text_channels:
+        await channel.send(f' Hoş geldiniz: , {member.mention}!')
+
+@bot.command()
+async def go(ctx):
+    author = ctx.author.name
+    if author not in Pokemon.pokemons.keys():
+        pokemon = Pokemon(author)
+        await ctx.send(await pokemon.info())
+        image_url = await pokemon.show_img()
+        if image_url:
+            embed = discord.Embed()
+            embed.set_image(url=image_url)
+            await ctx.send(embed=embed)
+        else:
+            await ctx.send("Pokémonun görüntüsü yüklenemedi!")
+    else:
+        await ctx.send("Zaten kendi Pokémonunuzu oluşturdunuz!")
+
     async def attack(self, enemy):
-        if isinstance(enemy, Wizard):  # Düşmanın Wizard veri tipi olup olmadığının kontrol edilmesi (Sihirbaz sınıfının bir örneği midir?) 
-            sans = random.randint(1, 5) 
-            if sans == 1:
-                return "Sihirbaz Pokémon, savaşta bir kalkan kullanıldı!"
+        if isinstance(enemy, Wizard):
+            chance = random.randint(1, 5)
+            if chance == 1:
+                return "Sihirbaz Pokémon, savaşta bir kalkan kullandı!"
         if enemy.hp > self.power:
             enemy.hp -= self.power
             return f"Pokémon eğitmeni @{self.pokemon_trainer} @{enemy.pokemon_trainer}'ne saldırdı\n@{enemy.pokemon_trainer}'nin sağlık durumu {enemy.hp}"
@@ -69,17 +101,62 @@ class Pokemon:
             enemy.hp = 0
             return f"Pokémon eğitmeni @{self.pokemon_trainer} @{enemy.pokemon_trainer}'ni yendi!"
 
-class Wizard (Pokemon):
-    async def feed(self):
-        return await super().feed(hp_increase=20)
+        
+@bot.command()
+async def start(ctx):
+    await ctx.send("Merhaba, ben bir Pokémon oyun botuyum! Kendi pokemonunuzu oluşturmak için !go yazın")
 
-class Fighter (Pokemon):
-    async def attack(self, enemy):
-        super_guc = random.randint(5, 15)  
-        self.guc += super_guc
-        sonuc = await super().attack(enemy)  
-        self.guc -= super_guc
-        return sonuc + f"\nDövüşçü Pokémon süper saldırı kullandı. Eklenen güç: {super_guc}"
-    async def feed(self):
-        return await super().feed(feed_interval=10)
+@bot.command()
+async def go(ctx):
+    author = ctx.author.name
+    if author not in Pokemon.pokemons:
+        chance = random.randint(1, 3)
+        if chance == 1:
+            pokemon = Pokemon(author)
+        elif chance == 2:
+            pokemon = Wizard(author)
+        elif chance == 3:
+            pokemon = Fighter(author)
+        await ctx.send(await pokemon.info())
+        image_url = await pokemon.show_img()
+        if image_url:
+            embed = discord.Embed()
+            embed.set_image(url=image_url)
+            await ctx.send(embed=embed)
+        else:
+            await ctx.send("Pokémon görüntüsü yüklenemedi.")
+    else:
+        await ctx.send("Zaten bir Pokémon oluşturdunuz.")
+
+@bot.command()
+async def attack(ctx):
+    target = ctx.message.mentions[0] if ctx.message.mentions else None
+    if target:
+        if target.name in Pokemon.pokemons and ctx.author.name in Pokemon.pokemons:
+            enemy = Pokemon.pokemons[target.name]
+            attacker = Pokemon.pokemons[ctx.author.name]
+            result = await attacker.attack(enemy)
+            await ctx.send(result)
+        else:
+            await ctx.send("Savaşmak için her iki katılımcının da Pokémon sahibi olması gerekir!")
+    else:
+        await ctx.send("Saldırmak istediğiniz kullanıcıyı etiketleyerek belirtin.")
+@bot.command()
+async def info(ctx):
+    if ctx.author.name in Pokemon.pokemons:
+        pok = Pokemon.pokemons[ctx.author.name]
+        await ctx.send(f'Pokémonunuzun ismi: {pok.name}, Canı: {pok.hp}, Gücü: {pok.power}')
+
     
+@bot.command()
+async def feed(ctx):
+    author = ctx.author.name
+    if author in Pokemon.pokemons:
+        pokemon = Pokemon.pokemons[author]
+        response = await pokemon.feed()
+        await ctx.send(response)
+    else:
+        await ctx.send("Pokémon'un yok!")
+
+
+bot.run(token)
